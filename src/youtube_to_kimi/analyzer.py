@@ -9,7 +9,6 @@ from .exceptions import DependencyError, DownloadError, ValidationError
 
 DEFAULT_BASE_URL = "https://api.moonshot.cn/v1"
 DEFAULT_MODEL = "kimi-k2.6"
-DEFAULT_MODEL = "kimi-k2.6"
 MAX_VIDEO_MB = 100
 
 
