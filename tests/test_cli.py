@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from youtube_to_kimi.cli import app
@@ -27,7 +26,9 @@ class TestDownloadCommand:
         video.write_bytes(b"x" * 1024)
         mock_download.return_value = video
 
-        result = runner.invoke(app, ["download", "https://youtube.com/watch?v=abc", "-o", str(tmp_path)])
+        result = runner.invoke(
+            app, ["download", "https://youtube.com/watch?v=abc", "-o", str(tmp_path)]
+        )
         assert result.exit_code == 0
         assert "Downloaded" in result.output
 
@@ -77,7 +78,9 @@ class TestPrepareCommand:
         mock_download.return_value = video
         mock_split.return_value = [chunk]
 
-        result = runner.invoke(app, ["prepare", "https://youtube.com/watch?v=abc", "-o", str(tmp_path)])
+        result = runner.invoke(
+            app, ["prepare", "https://youtube.com/watch?v=abc", "-o", str(tmp_path)]
+        )
         assert result.exit_code == 0
         assert "Video Chunks Ready for Upload" in result.output
 
@@ -101,7 +104,8 @@ class TestPrepareCommand:
         mock_split.return_value = [chunk1, chunk2]
 
         result = runner.invoke(
-            app, ["prepare", "https://youtube.com/watch?v=abc", "-o", str(tmp_path), "--keep-original"]
+            app,
+            ["prepare", "https://youtube.com/watch?v=abc", "-o", str(tmp_path), "--keep-original"],
         )
         assert result.exit_code == 0
         assert video.exists()  # original kept

@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
+from .analyzer import analyze_chunks, analyze_video, upload_video
 from .check_deps import check_all, get_dependency_versions
 from .downloader import download_video
 from .exceptions import YouTubeToKimiError
@@ -116,6 +117,85 @@ def prepare(
             "[bold cyan]💡 Tip:[/bold cyan] "
             "Upload these chunks to Kimi sequentially to analyze the full video."
         )
+    except YouTubeToKimiError as exc:
+        console.print(f"[bold red]❌ Error:[/bold red] {exc}")
+        raise typer.Exit(exc.exit_code) from exc
+
+
+@app.command()
+def analyze(
+    source: str = typer.Argument(..., help="YouTube URL or path to local video file"),
+    prompt: str = typer.Option(
+        "请分析这个视频的核心内容。",
+        "--prompt",
+        "-p",
+        help="Analysis prompt sent to the AI model",
+    ),
+    output: Path = typer.Option(
+        get_default_output_dir(),
+        "--output",
+        "-o",
+        help="Output directory for downloaded videos",
+    ),
+    target_mb: float = typer.Option(85.0, "--target-mb", "-t", help="Target chunk size in MB"),
+    model: str = typer.Option("kimi-k2.6", "--model", "-m", help="Kimi model name"),
+    save: Path = typer.Option(None, "--save", "-s", help="Save result to file"),
+) -> None:
+    """Analyze a video with Kimi API (auto download, split, upload, analyze)."""
+    try:
+        check_all()
+
+        # Determine if source is a URL or local file
+        video_path: Path
+        if source.startswith(("http://", "https://", "www.")):
+            console.print("[bold blue]📥 Downloading video...[/bold blue]")
+            video_path = download_video(source, output)
+            console.print(f"[green]✅ Downloaded:[/green] {video_path.name}")
+        else:
+            video_path = Path(source).expanduser()
+            if not video_path.exists():
+                raise YouTubeToKimiError(f"File not found: {video_path}")
+            console.print(f"[green]✅ Using local file:[/green] {video_path.name}")
+
+        # Auto-split if too large for API upload (100MB)
+        size = video_path.stat().st_size
+        if size > 100 * 1024 * 1024:
+            console.print(
+                f"[yellow]Video is {format_size(size)} — "
+                f"splitting into ~{target_mb:.0f}MB chunks...[/yellow]"
+            )
+            chunks = split_video(video_path, target_mb)
+            if not chunks:
+                raise YouTubeToKimiError("No chunks were produced.")
+        else:
+            chunks = [video_path]
+
+        # Analyze chunks
+        if len(chunks) == 1:
+            console.print("[bold blue]🤖 Analyzing with Kimi API...[/bold blue]")
+            video_url = upload_video(chunks[0])
+            result = analyze_video(video_url, prompt, model=model)
+        else:
+            console.print(
+                f"[bold blue]🤖 Analyzing {len(chunks)} chunks with Kimi API...[/bold blue]"
+            )
+            part_results = analyze_chunks(chunks, prompt, model=model)
+
+            # Summarize partial results
+            console.print("[bold blue]📝 Summarizing all parts...[/bold blue]")
+            result = "\n\n".join(
+                f"## 片段 {i + 1} 分析\n{r}" for i, r in enumerate(part_results)
+            )
+
+        console.print()
+        console.print("[bold green]📋 Analysis Result:[/bold green]")
+        console.print(result)
+
+        if save:
+            save.write_text(result, encoding="utf-8")
+            console.print()
+            console.print(f"[dim]💾 Saved to {save}[/dim]")
+
     except YouTubeToKimiError as exc:
         console.print(f"[bold red]❌ Error:[/bold red] {exc}")
         raise typer.Exit(exc.exit_code) from exc
