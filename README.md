@@ -1,23 +1,74 @@
 # youtube-to-kimi
 
-一个 CLI 工具，用于将 YouTube 视频下载并切割为 **<100MB** 的小片段，以便上传给 Kimi 等大模型进行逐帧视频分析。
+基于 **yt-dlp** + **ffmpeg stream-copy** 的视频分析预处理工具。
 
-> 🎬 [观看介绍视频](./assets/demo.mp4) — 30 秒快速了解 youtube-to-kimi 的功能和工作流
+将 YouTube（及 1000+ 平台）视频下载并切割为 **<100MB** 的片段，让 **Kimi**（kimi-k2.6）能够进行逐帧视频分析。
 
-## 为什么需要这个工具？
+> 切割后的 MP4 片段也可用于其他支持视频输入的 AI，但一键分析功能（`analyze` 命令）和 Kimi CLI Skill 均基于 Kimi 的视频理解能力构建。
 
-大多数 AI 助手（包括 Kimi）**无法直接访问 YouTube 链接**来分析视频内容。你需要先把视频下载到本地，再上传给 AI。但还有一个限制：
+> 🎬 [观看介绍视频](./assets/demo.mp4) — 30 秒快速了解功能和工作流
 
-- **单次文件上传通常有 100MB 上限**
-- 一个 45 分钟的技术演讲（1080p）通常有 300~600MB
+---
 
-`youtube-to-kimi` 帮你一键完成：
+## 双线使用方式
+
+| 路线 | 适用用户 | 需要什么 | 工作方式 |
+|------|---------|---------|---------|
+| **🤖 路线 A：独立 CLI + API** | 所有用户 | Moonshot API Key (`sk-...`) | `youtube-to-kimi analyze "URL"` 一键完成下载→切割→**Kimi 分析** |
+| **💬 路线 B：Kimi CLI Skill** | Kimi Code CLI 订阅用户 | 无需 API Key | 在 Kimi CLI 对话中自然触发，自动下载切割后通过 **Kimi ReadMediaFile** 分析 |
+
+### 路线 A 示例
+
+```bash
+export KIMI_API_KEY="sk-xxxxx"
+youtube-to-kimi analyze "https://www.youtube.com/watch?v=..." \
+  --prompt "总结这个技术演讲的核心观点" \
+  --model kimi-k2.6
+```
+
+### 路线 B 示例
+
+在 Kimi Code CLI 中直接说：
 
 ```
-YouTube URL → 下载 → 自动切割成 <100MB 片段 → 按顺序上传给 AI
+分析这个视频：https://www.youtube.com/watch?v=...
 ```
 
-切割使用 ffmpeg 的 **无损 stream-copy** 模式，不重新编码，不损失画质，速度极快。
+Kimi CLI 会自动触发 skill，完成下载、切割、逐段读取、汇总分析。
+
+---
+
+## 为什么基于 yt-dlp？
+
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) 是当今最强大的视频下载工具：
+
+- **1000+ 平台支持**：YouTube、Bilibili、Twitter/X、Vimeo、抖音...
+- **持续更新**：社区活跃，平台变动几小时内修复
+- **最佳画质**：自动选择最高可用质量
+- **字幕提取**：自动下载并嵌入多语言字幕
+- **开源可审计**：无黑盒，无隐私风险
+
+我们不重新发明下载轮子，而是把 yt-dlp 的能力无缝接入 AI 工作流。
+
+---
+
+## 核心链路
+
+```
+YouTube/Bilibili/... URL
+    ↓  yt-dlp 下载（最佳画质 + 字幕嵌入）
+本地视频文件（可能 300~600MB）
+    ↓  ffmpeg -c copy 无损切割
+<100MB 片段 × N
+    ↓
+┌─────────────────┬──────────────────┐
+│  路线 A：API     │  路线 B：Kimi CLI │
+│  自动上传分析    │  ReadMediaFile   │
+│  返回文本结果   │  逐段读取分析    │
+└─────────────────┴──────────────────┘
+```
+
+切割使用 ffmpeg **无损 stream-copy**（不重新编码），画质零损失，速度极快。
 
 ---
 
@@ -26,16 +77,8 @@ YouTube URL → 下载 → 自动切割成 <100MB 片段 → 按顺序上传给 
 | 工具 | 用途 | 安装方式 |
 |------|------|----------|
 | [uv](https://docs.astral.sh/uv/) | Python 包管理和运行 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 下载 YouTube 视频 | `brew install yt-dlp` 或 `uv tool install yt-dlp` |
-| [ffmpeg](https://ffmpeg.org/) | 视频切割（无损） | `brew install ffmpeg` |
-
-验证安装：
-
-```bash
-uv --version      # >= 0.6
-yt-dlp --version  # >= 2025
-ffmpeg -version   # 任意版本
-```
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 下载视频（1000+ 平台） | `brew install yt-dlp` 或 `uv tool install yt-dlp` |
+| [ffmpeg](https://ffmpeg.org/) | 无损视频切割 | `brew install ffmpeg` |
 
 ---
 
@@ -53,92 +96,47 @@ uv run youtube-to-kimi --help
 
 ---
 
-## 使用方法
+## 命令参考
 
-### 一键工作流（推荐）
-
-```bash
-youtube-to-kimi prepare "https://www.youtube.com/watch?v=xxxxx"
-```
-
-输出示例：
-
-```
-✅ Downloaded: ~/Downloads/youtube_to_kimi/How_Conductor_Builds_xxxx.mp4
-   Size: 325.5 MB
-
-Video is 325.5 MB — splitting into ~85MB chunks...
-
-🎬 Video Chunks Ready for Upload
-┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓
-┃  # ┃ Filename                              ┃ Size    ┃
-┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩
-│  1 │ How_Conductor_Builds_xxxx_part_000.mp4 │ 67.8 MB │
-│  2 │ How_Conductor_Builds_xxxx_part_001.mp4 │ 65.2 MB │
-│  3 │ How_Conductor_Builds_xxxx_part_002.mp4 │ 64.9 MB │
-│  4 │ How_Conductor_Builds_xxxx_part_003.mp4 │ 62.1 MB │
-│  5 │ How_Conductor_Builds_xxxx_part_004.mp4 │ 59.5 MB │
-│  6 │ How_Conductor_Builds_xxxx_part_005.mp4 │  3.5 MB │
-├────┼───────────────────────────────────────┼─────────┤
-│    │ Total                                 │ 323.0 MB│
-└────┴───────────────────────────────────────┴─────────┘
-
-💡 Tip: Upload these chunks to Kimi sequentially to analyze the full video.
-```
-
-### 分步执行
+### 路线 A：一键 AI 分析
 
 ```bash
-# 1. 仅下载
-youtube-to-kimi download "https://www.youtube.com/watch?v=xxxxx"
+# 分析 YouTube 视频（自动下载→切割→调用 Kimi API）
+youtube-to-kimi analyze "https://www.youtube.com/watch?v=..."
 
-# 2. 仅切割（对已有本地视频使用）
+# 分析本地视频文件
+youtube-to-kimi analyze path/to/video.mp4 --prompt "总结内容"
+
+# 自定义模型和保存结果
+youtube-to-kimi analyze "URL" \
+  --prompt "提取所有提到的技术架构" \
+  --model kimi-k2.6 \
+  --save result.md
+```
+
+环境变量：
+- `KIMI_API_KEY` — Moonshot API Key（`sk-...` 格式）
+- `KIMI_BASE_URL` — 可选，默认 `https://api.moonshot.cn/v1`
+
+### 路线 B：下载切割（供 Kimi CLI 使用）
+
+```bash
+# 下载并切割（供后续手动/Skill 上传）
+youtube-to-kimi prepare "https://www.youtube.com/watch?v=..."
+
+# 仅下载
+youtube-to-kimi download "URL"
+
+# 仅切割本地视频
 youtube-to-kimi split path/to/video.mp4 --target-mb 90
 ```
 
-### 命令参考
+### 其他命令
 
 ```bash
-# 查看帮助
-youtube-to-kimi --help
-
-# 查看版本
-youtube-to-kimi version
-
-# 自定义输出目录和切片大小
-youtube-to-kimi prepare "URL" \
-  --output ~/Videos/analysis \
-  --target-mb 90 \
-  --keep-original
+youtube-to-kimi --help      # 查看所有命令
+youtube-to-kimi version     # 查看版本和依赖信息
 ```
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `url` | YouTube 视频链接 | 必填 |
-| `--output, -o` | 输出目录 | `~/Downloads/youtube_to_kimi` |
-| `--target-mb, -t` | 每个片段的目标大小 | `85.0` |
-| `--keep-original` | 保留原始未切割文件 | `False` |
-
----
-
-## 完整工作流：从 YouTube 到 AI 分析
-
-```bash
-# 1. 下载并切割
-youtube-to-kimi prepare "https://www.youtube.com/watch?v=xxxxx"
-
-# 2. 在 Kimi 中按顺序上传片段
-#    - 上传 part_000.mp4，并说 "这是视频第 1 部分"
-#    - 上传 part_001.mp4，并说 "这是视频第 2 部分，继续分析"
-#    - ...以此类推
-#
-# 3. 等所有片段上传完成后，提问：
-#    "请总结这个视频的核心观点"
-#    "视频里提到了哪些技术架构？"
-#    "画一张架构图来描述这个系统"
-```
-
-> 💡 **提示**：一次上传所有片段给 Kimi，AI 会自动按顺序理解完整内容。你也可以每上传一个片段就简要说明进度。
 
 ---
 
@@ -146,39 +144,79 @@ youtube-to-kimi prepare "https://www.youtube.com/watch?v=xxxxx"
 
 ### 为什么用 stream-copy 而不是压缩？
 
-| 方案 | 画质损失 | 处理速度 | 文件大小可控性 |
-|------|----------|----------|----------------|
-| **Stream-copy（本项目）** | 零损失 | 极快（秒级） | 按时间切割，片段大小接近 |
-| 压缩/转码 | 有损 | 慢（分钟级） | 大小可控但画质下降 |
+| 方案 | 画质损失 | 处理速度 | 适用场景 |
+|------|----------|----------|----------|
+| **Stream-copy（本项目）** | 零损失 | 极快（秒级） | 技术演讲、代码演示、UI 录屏 |
+| 压缩/转码 | 有损 | 慢（分钟级） | 普通观影、社交媒体 |
 
-对于技术演讲、代码演示、UI 录屏等场景，**保持画质至关重要**（需要看清文字和代码）。Stream-copy 通过复制原始码流来切割，画质完全无损，速度极快。
+对于需要看清**文字、代码、UI 细节**的技术视频，stream-copy 是唯一正确的选择。
 
 ### 切割逻辑
 
-1. 通过 `ffprobe` 获取视频码率（bitrate）
-2. 计算每个片段的安全时长：`segment_time = (target_mb × 0.85 × 8 × 1024²) / bitrate`
-3. 使用 `ffmpeg -f segment -c copy` 进行无损切割
-4. 每个片段大小 ≤ target_mb，最后一片可能较小
+1. `ffprobe` 获取视频码率
+2. 计算安全时长：`segment_time = (target_mb × 0.85 × 8 × 1024²) / bitrate`
+3. `ffmpeg -f segment -c copy` 无损切割
+4. 每片 ≤ target_mb，最后一片可能较小
 
-### 字幕
+### 字幕处理
 
-下载时自动提取英文字幕和中文字幕（`en,zh,zh-CN,zh-TW`），并嵌入到 MP4 文件中，方便 AI 理解对话内容。
+下载时自动提取英文字幕和中文字幕（`en,zh,zh-CN,zh-TW`），嵌入到 MP4 中，帮助 AI 理解对话内容。
+
+---
+
+## 完整工作流示例
+
+### 路线 A（独立 CLI + API）
+
+```bash
+# 1. 设置 API Key
+export KIMI_API_KEY="sk-xxxxx"
+
+# 2. 一键分析
+youtube-to-kimi analyze "https://www.youtube.com/watch?v=..." \
+  --prompt "请画一张架构图来描述这个系统的技术架构" \
+  --save analysis.md
+
+# 3. 查看结果
+cat analysis.md
+```
+
+### 路线 B（Kimi CLI Skill）
+
+```
+# 在 Kimi CLI 中输入
+分析这个视频：https://www.youtube.com/watch?v=...
+
+# Kimi CLI 会自动：
+# 1. 运行 youtube-to-kimi prepare 下载并切割
+# 2. 用 ReadMediaFile 逐个读取片段
+# 3. 汇总并输出完整分析
+```
 
 ---
 
 ## 常见问题
 
 **Q: 支持哪些视频平台？**
-> 所有 [yt-dlp 支持的平台](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)都可以，包括 YouTube、Bilibili、Twitter/X、Vimeo 等。
+> 所有 [yt-dlp 支持的平台](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)都可以，包括 YouTube、Bilibili、Twitter/X、Vimeo、抖音等 1000+ 平台。
 
-**Q: 为什么切片后总大小比原文件小？**
-> 因为去除了原始文件的元数据冗余，且最后一个片段通常较小。内容本身没有任何损失。
+**Q: 为什么需要切割？**
+> 大多数 AI 助手（包括 Kimi）的单次文件上传限制为 100MB。一个 45 分钟 1080p 视频通常有 300~600MB。
 
-**Q: 可以调整切片大小吗？**
-> 可以，使用 `--target-mb` 参数。建议设置在 85~95MB 之间，留出余量避免刚好超过 100MB 限制。
+**Q: 切割后视频质量会下降吗？**
+> 不会。ffmpeg `-c copy` 是 stream-copy，直接复制原始码流，画质零损失。之后由 **Kimi k2.6** 模型进行视频理解分析。
 
 **Q: 需要 YouTube API Key 吗？**
 > 不需要。yt-dlp 直接解析页面获取视频流地址。
+
+**Q: Kimi Code 的 key（`sk-kimi-...`）能用吗？**
+> 不能。Kimi Code API 仅限 Coding Agent 环境使用。请使用 Moonshot 开放平台申请的 key（`sk-...` 格式）。
+
+**Q: 为什么强调 Kimi？其他 AI 不能用吗？**
+> 切割后的 MP4 片段是通用格式，任何支持视频输入的 AI 都可以使用。但本项目的一键分析功能（`analyze` 命令）和 Kimi CLI Skill 是专门基于 **Kimi k2.6 的视频理解能力**构建的，目前仅支持调用 Kimi API。
+
+**Q: 可以调整切片大小吗？**
+> 可以，使用 `--target-mb` 参数。建议 85~95MB，留出余量避免刚好超过 100MB 限制。
 
 ---
 
