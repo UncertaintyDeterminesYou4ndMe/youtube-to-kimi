@@ -117,6 +117,12 @@ def prepare(
             "[bold cyan]💡 Tip:[/bold cyan] "
             "Upload these chunks to Kimi sequentially to analyze the full video."
         )
+        if len(chunks) > 1:
+            console.print(
+                f"[bold yellow]⚠️  Important:[/bold yellow] "
+                f"Make sure Kimi reads all {len(chunks)} parts before summarizing. "
+                f"Stopping early may miss key content in later segments."
+            )
     except YouTubeToKimiError as exc:
         console.print(f"[bold red]❌ Error:[/bold red] {exc}")
         raise typer.Exit(exc.exit_code) from exc

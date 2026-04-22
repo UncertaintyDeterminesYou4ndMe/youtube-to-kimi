@@ -76,13 +76,28 @@ Then call `ReadMediaFile` for `*_part_000.mp4`, `*_part_001.mp4`, etc.
 After each chunk, confirm receipt and continue:
 > "Got part N. Continuing with part N+1:"
 
+### ⚠️ Critical Constraint: Read ALL Chunks Before Summarizing
+
+**You MUST read every single chunk before giving a final summary.**
+
+- Do NOT claim "I have a complete understanding" after reading only some chunks.
+- Do NOT provide a final analysis until the last chunk (`part_NNN`) has been read.
+- After each chunk, only take notes — withhold final judgment.
+- The user may explicitly ask for a summary mid-way; in that case, clearly state:
+  > "I have only read X of Y parts so far. Here is what I have seen, but the summary may be incomplete."
+
+**Why this matters:** Agentic context windows and token pressure can cause premature
+confidence. The second half of a video often contains demos, Q&A, or critical
+technical details that change the overall interpretation.
+
 ### Step 3: Synthesize
 
-After all chunks have been uploaded and read, provide a comprehensive analysis:
+**Only after ALL chunks have been read**, provide a comprehensive analysis:
 - Overall summary of the video
 - Key points and takeaways
 - Technical details (if applicable)
 - Timeline of events (if applicable)
+- Any corrections to assumptions made from earlier chunks
 
 ## Important Notes
 
